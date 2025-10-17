@@ -11,18 +11,19 @@ public class RuletaCircular extends JFrame {
     private JButton girarButton;
     private JLabel resultadoLabel;
     private Timer timer;
-    private double anguloBola = 0;
-    private double anguloVisualRuleta = 0;
+    private double anguloRuleta = 0;   // horario (+)
+    private double anguloBola = 0;     // antihorario (-)
     private double radioBola = 12;
     private double radioOrbita;
     private boolean girando = false;
-    private int fase = 0;
+    private int estado = 0; // 1=girando inicial, 2=buscando ganador, 3=centro
+    private int sectorGanador = 0;
     private double radioActual;
     private static final Random RAND = new Random();
 
     public RuletaCircular() {
         configurarRuleta();
-        setTitle("Ruleta Americana Auténtica");
+        setTitle("Ruleta Americana - Versión Final");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -38,28 +39,21 @@ public class RuletaCircular extends JFrame {
         girarButton.addActionListener(e -> girar());
         add(girarButton, BorderLayout.SOUTH);
 
-        setSize(700, 800);
+        setSize(800, 900);
         setLocationRelativeTo(null);
     }
 
     private void configurarRuleta() {
-        // ✅ Orden auténtico de la ruleta americana (sentido horario desde 0)
+        // Orden auténtico de la ruleta americana
         String[] ordenRuleta = {
             "0", "28", "9", "26", "30", "11", "7", "20", "32", "17",
             "5", "22", "34", "15", "3", "24", "36", "13", "1", "00",
             "27", "10", "25", "29", "12", "8", "19", "31", "18", "6",
             "21", "33", "16", "4", "23", "35", "14", "2"
         };
-
-        // Verificar que son 38 números
-        if (ordenRuleta.length != 38) {
-            throw new IllegalStateException("La ruleta debe tener 38 números");
-        }
-
-        // Copiar al arreglo principal
         System.arraycopy(ordenRuleta, 0, numeros, 0, 38);
 
-        // ✅ Colores: rojos y negros según ruleta americana
+        // Números rojos
         java.util.Set<String> rojos = new java.util.HashSet<>();
         rojos.add("1"); rojos.add("3"); rojos.add("5"); rojos.add("7"); rojos.add("9");
         rojos.add("12"); rojos.add("14"); rojos.add("16"); rojos.add("18"); rojos.add("19");
@@ -85,43 +79,51 @@ public class RuletaCircular extends JFrame {
         girarButton.setEnabled(false);
         resultadoLabel.setText("Girando...");
 
-        double anguloFinalBola = RAND.nextDouble() * 360;
-        int vueltasBola = 5 + RAND.nextInt(4);
-        double anguloTotalBola = vueltasBola * 360 + anguloFinalBola;
+        sectorGanador = RAND.nextInt(38);
 
-        int vueltasRuleta = 4 + RAND.nextInt(3);
-        double anguloTotalRuleta = vueltasRuleta * 360;
-
+        anguloRuleta = 0;
         anguloBola = 0;
-        anguloVisualRuleta = 0;
-        fase = 0;
+        estado = 1;
 
-        timer = new Timer(25, e -> {
-            if (fase == 0) {
-                anguloBola -= 18;
-                anguloVisualRuleta += 12;
+        timer = new Timer(30, e -> {
+            switch (estado) {
+                case 1: // 2 vueltas iniciales
+                    anguloRuleta += 12;
+                    anguloBola -= 12;
+                    if (anguloRuleta >= 720) {
+                        estado = 2;
+                    }
+                    break;
 
-                if (anguloVisualRuleta >= anguloTotalRuleta) {
-                    fase = 1;
-                    radioActual = radioOrbita;
-                }
-            } else if (fase == 1) {
-                radioActual -= 10;
-                if (radioActual <= 30) {
-                    radioActual = 30;
-                    timer.stop();
-
-                    double anguloRelativo = (anguloBola - anguloVisualRuleta) % 360;
-                    if (anguloRelativo < 0) anguloRelativo += 360;
-
-                    double anguloAjustado = (anguloRelativo + 90) % 360;
+                case 2: // Bola gira hasta encontrar el ganador
+                    anguloBola -= 8;
                     double anguloPorSector = 360.0 / 38;
-                    int sectorIndex = (int) (anguloAjustado / anguloPorSector) % 38;
+                    double anguloGanador = sectorGanador * anguloPorSector;
 
-                    resultadoLabel.setText("¡Ganaste: " + numeros[sectorIndex] + "!");
-                    girarButton.setEnabled(true);
-                    girando = false;
-                }
+                    double bolaNorm = anguloBola % 360;
+                    if (bolaNorm < 0) bolaNorm += 360;
+                    double ganadorNorm = anguloGanador % 360;
+
+                    double diferencia = Math.abs(bolaNorm - ganadorNorm);
+                    if (diferencia > 180) diferencia = 360 - diferencia;
+
+                    if (diferencia < 4.7) { // Medio sector
+                        anguloBola = ganadorNorm;
+                        estado = 3;
+                        radioActual = radioOrbita;
+                    }
+                    break;
+
+                case 3: // Bola regresa al centro
+                    radioActual -= 6;
+                    if (radioActual <= 20) {
+                        radioActual = 20;
+                        timer.stop();
+                        resultadoLabel.setText("¡Ganaste: " + numeros[sectorGanador] + "!");
+                        girarButton.setEnabled(true);
+                        girando = false;
+                    }
+                    break;
             }
             ruletaPanel.repaint();
         });
@@ -138,14 +140,14 @@ public class RuletaCircular extends JFrame {
 
             int ancho = getWidth();
             int alto = getHeight();
-            int tamaño = Math.min(ancho, alto) - 140;
+            int tamaño = Math.min(ancho, alto) - 180;
             int centroX = ancho / 2;
             int centroY = alto / 2;
             radioOrbita = tamaño / 2 - 10;
 
             double anguloPorSector = 360.0 / 38;
             for (int i = 0; i < 38; i++) {
-                double anguloInicio = i * anguloPorSector - 90 + anguloVisualRuleta;
+                double anguloInicio = i * anguloPorSector - 90 + anguloRuleta;
                 g2d.setColor(colores[i]);
                 g2d.fillArc(centroX - tamaño/2, centroY - tamaño/2, tamaño, tamaño,
                            (int)anguloInicio, (int)anguloPorSector);
@@ -154,28 +156,32 @@ public class RuletaCircular extends JFrame {
                 g2d.drawArc(centroX - tamaño/2, centroY - tamaño/2, tamaño, tamaño,
                            (int)anguloInicio, (int)anguloPorSector);
 
+                // Dibujar números más cerca del borde (¡visibles!)
                 double anguloMitad = Math.toRadians(anguloInicio + anguloPorSector / 2);
-                int radioTexto = (int)(tamaño * 0.38);
+                int radioTexto = (int)(tamaño * 0.46); // ← clave: más al borde
                 int textoX = (int)(centroX + radioTexto * Math.cos(anguloMitad));
                 int textoY = (int)(centroY - radioTexto * Math.sin(anguloMitad));
 
                 g2d.setColor(Color.WHITE);
-                g2d.setFont(new Font("Arial", Font.BOLD, 12));
+                g2d.setFont(new Font("Arial", Font.BOLD, 24));
                 FontMetrics fm = g2d.getFontMetrics();
                 String texto = numeros[i];
                 int w = fm.stringWidth(texto);
                 g2d.drawString(texto, textoX - w/2, textoY + fm.getAscent()/2);
             }
 
+            // Círculo central: 3 veces más grande y amarillo
+            int radioCentro = 240;
             g2d.setColor(Color.DARK_GRAY);
-            g2d.fillOval(centroX - 30, centroY - 30, 60, 60);
+            g2d.fillOval(centroX - radioCentro, centroY - radioCentro, radioCentro * 2, radioCentro * 2);
             g2d.setColor(Color.YELLOW);
-            g2d.setStroke(new BasicStroke(3));
-            g2d.drawOval(centroX - 30, centroY - 30, 60, 60);
+            g2d.setStroke(new BasicStroke(4));
+            g2d.drawOval(centroX - radioCentro, centroY - radioCentro, radioCentro * 2, radioCentro * 2);
 
+            // Dibujar bola
             if (girando) {
+                double r = (estado >= 3) ? radioActual : radioOrbita;
                 double anguloDibujo = anguloBola - 90;
-                double r = (fase == 1) ? radioActual : radioOrbita;
                 double rad = Math.toRadians(anguloDibujo);
                 int x = (int)(centroX + r * Math.cos(rad));
                 int y = (int)(centroY - r * Math.sin(rad));
