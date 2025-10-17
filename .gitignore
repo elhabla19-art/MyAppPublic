@@ -1,0 +1,7 @@
+# Archivos del sistema macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Iconos personalizados de carpetas en macOS
+__MACOSX/
